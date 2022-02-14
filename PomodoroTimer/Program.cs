@@ -8,6 +8,7 @@ namespace PomodoroTimer
 {
     static class Program
     {
+        // Для запрета запуска нескольких копий приложения.
         static Mutex protector = new Mutex(true, "{F38B6B09-7E57-4627-BDAF-57EB3D332D27}");
 
         [STAThread]
@@ -29,29 +30,37 @@ namespace PomodoroTimer
 
     class PomodoroContext : ApplicationContext
     {
-        const double MinuteInterval = 60000;
+        const double MinuteInterval = 1000;
 
         NotifyIcon trayIcon;
+        MenuItem runSprint;
+        MenuItem stopSprint;
+        ContextMenu trayIconMenu;
+
         System.Timers.Timer mainTimer = null;
         bool Running = false;
 
         public PomodoroContext()
         {
+            runSprint = new MenuItem("Спринт", RunSprint);
+            stopSprint = new MenuItem("Стоп", StopSprint) { Enabled = false };
+
+            trayIconMenu = new ContextMenu(new MenuItem[] {
+                runSprint,
+                stopSprint,
+                new MenuItem("-"),
+                new MenuItem("Настройки", ShowSettings),
+                new MenuItem("Выход", ExitProgram),
+            });
+
             trayIcon = new NotifyIcon()
             {
                 Icon = PomodoroTimer.AppIcon,
-                ContextMenu = new ContextMenu(new MenuItem[] {
-                    new MenuItem("Спринт", RunSprint),
-                    new MenuItem("Стоп", StopSprint),
-                    new MenuItem("-"),
-                    new MenuItem("Настройки", ShowSettings),
-                    new MenuItem("Выход", ExitProgram),
-                }),
+                ContextMenu = trayIconMenu,
                 Text = "Pomodoro Timer"
             };
 
             trayIcon.DoubleClick += ShowSettings;
-
             trayIcon.Visible = true;
 
             Settings.Load();
@@ -74,7 +83,11 @@ namespace PomodoroTimer
 
         void RunSprint(object sender, EventArgs e)
         {
+            if (Running) return;
+
             Running = true;
+            stopSprint.Enabled = true;
+            runSprint.Enabled = false;
 
             Queue<SprintTimer> sprint = new Queue<SprintTimer>();
 
@@ -84,29 +97,18 @@ namespace PomodoroTimer
                 sprint.Enqueue(new SprintTimer(si.BreakInterval, "Спринт продолжается", "Успехов в работе"));
             }
 
-            sprint.Enqueue(new SprintTimer(0, "Спринт завершён", "Хорошо поработали."));
-
             mainTimer = new System.Timers.Timer() { AutoReset = true, Interval = MinuteInterval };
 
             mainTimer.Elapsed += (s, args) =>
             {
-                if (!Running)
-                {
-                    mainTimer.Stop();
-                    mainTimer.Dispose();
-                    sprint.Clear();
-
-                    new ToastContentBuilder()
-                        .AddText("Спринт прерван")
-                        .AddText("Возвращайтесь снова")
-                        .Show();
-
-                    return;
-                }
-
                 if (sprint.Count != 0 && sprint.Peek().Interval-- == 0)
                 {
                     sprint.Dequeue().ShowToast();
+
+                    if (sprint.Count == 0)
+                    {
+                        StopSprint(null, null);
+                    }
                 }
             };
 
@@ -121,6 +123,16 @@ namespace PomodoroTimer
         void StopSprint(object sender, EventArgs e)
         {
             Running = false;
+            runSprint.Enabled = true;
+            stopSprint.Enabled = false;
+
+            new ToastContentBuilder()
+                .AddText("Спринт завершён")
+                .AddText("Возвращайтесь снова")
+                .Show();
+
+            mainTimer.Enabled = false;
+            mainTimer.Dispose();
         }
     }
 }
