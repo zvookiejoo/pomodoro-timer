@@ -30,7 +30,7 @@ namespace PomodoroTimer
 
     class PomodoroContext : ApplicationContext
     {
-        const double MinuteInterval = 60000;
+        const double MinuteInterval = 1000;
 
         NotifyIcon trayIcon;
         MenuItem runSprint;
